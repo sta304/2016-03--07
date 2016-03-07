@@ -1,0 +1,162 @@
+---
+title: 'STA304'
+author: "Neil Montgomery"
+date: "2016-03-03"
+output: 
+  ioslides_presentation: 
+    css: 'styles.css' 
+    widescreen: true 
+    transition: 0.001
+---
+\newcommand{\E}[1]{E{\left(#1\right)}}
+\newcommand{\flist}[2]{\{#1_1, #1_2, \ldots, #1_#2\}}
+\newcommand{\fulist}[3]{\{#1_{{#2}1}, #1_{{#2}2}, \ldots, #1_{{#2}{#3}}\}}
+\renewcommand{\bar}[1]{\overline{#1}}
+\newcommand{\SE}[1]{\sqrt{\hat{V}(#1)}}
+
+
+```{r, echo=FALSE, message=FALSE}
+## Tx stuff
+library(rio)
+library(dplyr)
+tx <- import("tx.csv")
+tx$Size <- paste0(tx$Size, "KVA")
+N_tx <- nrow(tx)
+n_tx <- 600
+
+library(knitr)
+tx %>% 
+  group_by(Size) %>% 
+  summarise(N=n(), W = n()/nrow(tx)) -> tx_by_size
+
+set.seed(1)
+tx_srs <- sample_n(tx, n_tx)
+
+tx_srs %>% 
+  summarize(mean = mean(Age), sd = sd(Age), 
+            B = 2*sqrt(var(Age)/n_tx*(N_tx-n_tx)/N_tx)) -> tx_srs_est
+
+set.seed(2)
+tx %>% 
+  group_by(Size) %>% 
+  sample_frac(n_tx/N_tx) -> tx_strat
+
+tx_strat %>% 
+  group_by(Size) %>% 
+  summarise(n = n(), means = mean(Age), variances = var(Age), sds = sd(Age)) -> tx_strat_summ
+```
+
+```{r, echo=FALSE}
+## Fittings stuff
+fittings <- import("fittings.csv")
+N_fittings <- nrow(fittings)
+fittings %>% 
+  group_by(Municipality) %>% 
+  summarize(N = n(), W = n()/N_fittings) -> fittings_by_mun
+n_fittings <- 1000
+```
+
+```{r, echo=FALSE}
+set.seed(500)
+fittings %>% 
+  group_by(Municipality) %>% 
+  sample_frac(n_fittings/N_fittings) -> fittings_strat
+```
+
+```{r, echo=FALSE}
+fittings_strat %>% 
+  group_by(Municipality) %>% 
+  summarize(n=n(), mean=mean(Age), sd = sd(Age)) -> fittings_strat_summ
+```
+
+```{r, echo=FALSE}
+fittings_strat %>% 
+  group_by(Municipality) %>% 
+  summarise(n=n(), mean=mean(Age), var=var(Age)) %>% 
+  left_join(., fittings_by_mun, "Municipality") %>% 
+  mutate(W_mean = mean*W, W_varhat = W^2*var/n*(N_fittings-n)/N_fittings) -> f_st
+B_st <- 2*sqrt(sum(f_st$var / f_st$n * (1 - f_st$n/f_st$N) * f_st$W^2))
+```
+
+```{r, echo=FALSE}
+fittings %>% sample_n(999) %>% summarize(mean=mean(Age), sd(Age), B =2*sd(Age)/sqrt(999)*(1-999/N_fittings)) -> f_srs
+```
+
+# stratified sampling: poststratification
+
+## Weights known, strata unavailable { .build }
+
+Stratification can be practically difficult. The frame may not contain the required information for partition into strata.
+
+But the weights $W_i$ might be known. (This is key.) (Note: the book finally gets around to adopting the notion of weight and calls the weights $A_i$.)
+)
+
+For example, in Canada the male and female proportions are 0.496 and 0.504 respectively. (Many other population-level proportions are known as well.) But it may not be possible to stratify by sex. 
+
+It can be suitable to perform a simple random sample and divide the sample up into groups, adjusting the population parameter estimate accordingly. 
+
+## Poststratification illustration { .build }
+
+For example, a Statistics Canada regularly compiles salary data and publishes results by sex. Suppose in one particular survey the SRS results are as follows (in 000's of dollars)
+
+```{r, echo=FALSE}
+library(tidyr)
+set.seed(1)
+female <- data_frame(Sex="Female", Income=rweibull(550, 1.5, 30000)/1000)
+male <- data_frame(Sex="Male", Income=rweibull(450, 1.3, 45000)/1000)
+income <- rbind(female, male)
+income %>% 
+  group_by(Sex) %>% 
+  summarize(n = n(), mean=mean(Income), var=var(Income), sd=sd(Income)) -> inc_summ
+kable(inc_summ, digits=2)
+options(digits=2)
+```
+
+The SRS population mean income would be `r round(mean(income$Income), 2)`.
+
+But we know the SRS sub-sample sizes are off. Here is the *poststratified* estimate of the mean income, reweighted for the known true weights:
+
+$$\bar y_{post} = W_1 \bar y_1 + W_2 \bar y_2 = 0.504 \cdot `r inc_summ$mean[1]` + 0.496 \cdot `r inc_summ$mean[2]` = `r 0.504*inc_summ$mean[1] + 0.496*inc_summ$mean[2]`$$
+
+The question is...what is $V(\bar y_{post})$?
+
+## poststratified variance - I { .build }
+
+When the $n_i$ are fixed we have from before:
+
+$$
+\begin{align*}
+\hat V(\bar y_{st}) &= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i}\frac{N_i-n_i}{N_i}\\
+&= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i}\left(1-\frac{n_i}{N_i}\right)\\
+&= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i} - \sum_{i=1}^L W_is_i^2
+\end{align*}
+$$
+
+What is fundamentally different this time?
+
+## poststratified variance - I { .build }
+
+The procedure is to replace $1/n_i$ with $E(1/n_i)$. This is difficult to evaluate but can be approximated by:
+
+$$E\left(\frac{1}{n_i}\right) = \frac{1}{nW_i} + \frac{1-W_i}{n^2W_i^2}$$
+
+Essentally "almost what we expect" plus "something that might be small". The approximation is good as long as $n$ is large and the weights are not too small. 
+The resulting formula (see book for the three line derivation) is:
+
+$$\hat V(\bar y_{post}) = \frac{1}{n}\left(1-\frac{n}{N}\right) \sum_{i=1}^L W_is^2_i + \frac{1}{n^2} \sum_{i=1}^L (1-W_i)s^2_i$$
+
+## example completed
+
+The variance of the poststratified mean income estimate is comes from this summary of the situation:
+
+```{r, echo=FALSE}
+options(digits=10)
+inc_summ %>% 
+  mutate(W_i = c(0.504, 0.496),
+         "W_i*s^2_i" = W_i*var,
+         "(1-W_i)*s^2_i" = (1-W_i)*var) -> inc_summ_aug
+
+kable(inc_summ_aug, digits=2)
+
+```
+
