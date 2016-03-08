@@ -122,13 +122,13 @@ The question is...what is $V(\bar y_{post})$?
 
 ## poststratified variance - I { .build }
 
-When the $n_i$ are fixed we have from before:
+When the $n_i$ are fixed we have from before (CORRECTED - $1/N$ was missing):
 
 $$
 \begin{align*}
 \hat V(\bar y_{st}) &= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i}\frac{N_i-n_i}{N_i}\\
 &= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i}\left(1-\frac{n_i}{N_i}\right)\\
-&= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i} - \sum_{i=1}^L W_is_i^2
+&= \sum_{i=1}^L W_i^2 \frac{s^2}{n_i} - \frac{1}{N}\sum_{i=1}^L W_is_i^2
 \end{align*}
 $$
 
@@ -156,7 +156,7 @@ inc_summ %>%
          "W_i*s^2_i" = W_i*var,
          "(1-W_i)*s^2_i" = (1-W_i)*var) -> inc_summ_aug
 
-kable(inc_summ_aug, digits=2)
+kable(inc_summ_aug, digits=3)
 
 ```
 
